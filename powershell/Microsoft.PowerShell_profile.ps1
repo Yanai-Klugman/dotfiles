@@ -1,5 +1,6 @@
 # Set the base path for your PowerShell profile scripts
 $basePath = "$HOME\Documents\PowerShell"
+$PSScriptRoot = "$HOME\Documents\PowerShell"
 
 # Lazy loading modules
 function Load-Environment {
