@@ -1,30 +1,228 @@
+# Microsoft.PowerShell_profile.ps1
+
 # Set the base path for your PowerShell profile scripts
 $basePath = "$HOME\Documents\PowerShell"
-$PSScriptRoot = "$HOME\Documents\PowerShell"
 
-# Lazy loading modules
-function Load-Environment {
-    . "$basePath/config/environment.ps1"
-    Remove-Item -Path function:Load-Environment
+# Function to check for command existence
+function Test-CommandExists {
+    param ($command)
+    $null -ne (Get-Command $command -ErrorAction SilentlyContinue)
 }
-function Load-Utilities {
-    . "$basePath/functions/core.ps1"
-    Remove-Item -Path function:Load-Utilities
+
+# Function to set editor alias
+function Set-EditorAlias {
+    $EDITOR = if (Test-CommandExists nvim) { 'nvim' }
+              elseif (Test-CommandExists pvim) { 'pvim' }
+              elseif (Test-CommandExists vim) { 'vim' }
+              elseif (Test-CommandExists vi) { 'vi' }
+              elseif (Test-CommandExists code) { 'code' }
+              elseif (Test-CommandExists notepad++) { 'notepad++' }
+              elseif (Test-CommandExists sublime_text) { 'sublime_text' }
+              else { 'notepad' }
+    Set-Alias -Name vim -Value $EDITOR
 }
-function Load-Editor {
-    . "$basePath/functions/editor.ps1"
-    Remove-Item -Path function:Load-Editor
+
+# Editor Configuration
+Set-EditorAlias
+
+# Core utility functions
+function touch {
+    param ($file)
+    "" | Out-File $file -Encoding ASCII
 }
-function Load-SystemNetwork {
-    . "$basePath/functions/system_network.ps1"
-    Remove-Item -Path function:Load-SystemNetwork
+
+function ff {
+    param ($name)
+    Get-ChildItem -Recurse -Filter "*${name}*" -ErrorAction SilentlyContinue | ForEach-Object {
+        Write-Output "$($_.Directory)\$($_.Name)"
+    }
 }
+
+function hb {
+    param ($filePath)
+    if (-not (Test-Path $filePath)) {
+        Write-Error "File path does not exist."
+        return
+    }
+    
+    $content = Get-Content $filePath -Raw
+    $uri = "http://bin.christitus.com/documents"
+    try {
+        $response = Invoke-RestMethod -Uri $uri -Method Post -Body $content -ErrorAction Stop
+        $hasteKey = $response.key
+        $url = "http://bin.christitus.com/$hasteKey"
+        Write-Output $url
+    } catch {
+        Write-Error "Failed to upload the document. Error: $_"
+    }
+}
+
+function grep {
+    param ($regex, $dir)
+    if ($dir) {
+        Get-ChildItem $dir | Select-String $regex
+    } else {
+        $input | Select-String $regex
+    }
+}
+
+function sed {
+    param ($file, $find, $replace)
+    (Get-Content $file).replace("$find", $replace) | Set-Content $file
+}
+
+function which {
+    param ($name)
+    Get-Command $name | Select-Object -ExpandProperty Definition
+}
+
+function export {
+    param ($name, $value)
+    Set-Item -Force -Path "env:$name" -Value $value
+}
+
+function head {
+    param ($path, $n = 10)
+    Get-Content $path -Head $n
+}
+
+function tail {
+    param ($path, $n = 10)
+    Get-Content $path -Tail $n
+}
+
+function la {
+    Get-ChildItem -Path . -Force | Format-Table -AutoSize
+}
+
+function ll {
+    Get-ChildItem -Path . -Force -Hidden | Format-Table -AutoSize
+}
+
+function gs {
+    git status
+}
+
+function ga {
+    git add .
+}
+
+function gc {
+    param ($m)
+    git commit -m "$m"
+}
+
+function gp {
+    git push
+}
+
+function g {
+    z Github
+}
+
+function gcom {
+    git add .
+    git commit -m "$args"
+}
+
+function lazyg {
+    git add .
+    git commit -m "$args"
+    git push
+}
+
+function cpy {
+    param ($text)
+    Set-Clipboard $text
+}
+
+function pst {
+    Get-Clipboard
+}
+
+function docs {
+    Set-Location -Path $HOME\Documents
+}
+
+function dtop {
+    Set-Location -Path $HOME\Desktop
+}
+
+# System and network functions
+function uptime {
+    if ($PSVersionTable.PSVersion.Major -eq 5) {
+        Get-WmiObject win32_operatingsystem | Select-Object @{Name='LastBootUpTime'; Expression={$_.ConverttoDateTime($_.lastbootuptime)}} | Format-Table -HideTableHeaders
+    } else {
+        net statistics workstation | Select-String "since" | ForEach-Object { $_.ToString().Replace('Statistics since ', '') }
+    }
+}
+
+function reload-profile {
+    & $profile
+}
+
+function unzip ($file) {
+    Expand-Archive -Path $file -DestinationPath $pwd
+}
+
+function pkill {
+    Get-Process $args[0] -ErrorAction SilentlyContinue | Stop-Process
+}
+
+function pgrep {
+    Get-Process $args[0]
+}
+
+function nf {
+    param ($name)
+    New-Item -ItemType "file" -Path . -Name $name
+}
+
+function mkcd {
+    param ($dir)
+    mkdir $dir -Force
+    Set-Location $dir
+}
+
+function sysinfo {
+    Get-ComputerInfo
+}
+
+function df {
+    get-volume
+}
+
+function Get-PubIP {
+    (Invoke-WebRequest http://ifconfig.me/ip).Content
+}
+
+function flushdns {
+    Clear-DnsClientCache
+}
+
+# Quality of Life Aliases
+function k9 { Stop-Process -Name $args[0] }
+function la { Get-ChildItem -Path . -Force | Format-Table -AutoSize }
+function ll { Get-ChildItem -Path . -Force -Hidden | Format-Table -AutoSize }
+function gs { git status }
+function ga { git add . }
+function gc { param ($m) git commit -m "$m" }
+function gp { git push }
+function g { z Github }
+function gcom { git add .; git commit -m "$args" }
+function lazyg { git add .; git commit -m "$args"; git push }
+function sysinfo { Get-ComputerInfo }
+function flushdns { Clear-DnsClientCache }
+function cpy { param ($text) Set-Clipboard $text }
+function pst { Get-Clipboard }
+function docs { Set-Location -Path $HOME\Documents }
+function dtop { Set-Location -Path $HOME\Desktop }
+function ep { vim $PROFILE }
 
 # Load configuration scripts
-. "$basePath/config/update.ps1"
 . "$basePath/config/theme.ps1"
 
-# Set up admin check and prompt customization
+# Admin check and prompt customization
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 function prompt {
     if ($isAdmin) { "[" + (Get-Location) + "] # " } else { "[" + (Get-Location) + "] $ " }
@@ -32,43 +230,8 @@ function prompt {
 $adminSuffix = if ($isAdmin) { " [ADMIN]" } else { "" }
 $Host.UI.RawUI.WindowTitle = "PowerShell {0}$adminSuffix" -f $PSVersionTable.PSVersion.ToString()
 
-# Configure lazy loading
-function vim { Load-Editor; vim $args }
-function touch { Load-Utilities; touch $args }
-function ff { Load-Utilities; ff $args }
-function Get-PubIP { Load-SystemNetwork; Get-PubIP $args }
-function uptime { Load-SystemNetwork; uptime $args }
-function reload-profile { Load-SystemNetwork; reload-profile $args }
-function unzip { Load-SystemNetwork; unzip $args }
-function hb { Load-Utilities; hb $args }
-function grep { Load-Utilities; grep $args }
-function df { Load-SystemNetwork; df $args }
-function sed { Load-Utilities; sed $args }
-function which { Load-Utilities; which $args }
-function export { Load-Utilities; export $args }
-function pkill { Load-SystemNetwork; pkill $args }
-function pgrep { Load-SystemNetwork; pgrep $args }
-function head { Load-Utilities; head $args }
-function tail { Load-Utilities; tail $args }
-function nf { Load-SystemNetwork; nf $args }
-function mkcd { Load-SystemNetwork; mkcd $args }
-
-# Quality of Life Aliases
-function docs { Load-Utilities; docs $args }
-function dtop { Load-Utilities; dtop $args }
-function ep { Load-Editor; ep $args }
-function k9 { Load-SystemNetwork; k9 $args }
-function la { Load-Utilities; la $args }
-function ll { Load-Utilities; ll $args }
-function gs { Load-Utilities; gs $args }
-function ga { Load-Utilities; ga $args }
-function gc { Load-Utilities; gc $args }
-function gp { Load-Utilities; gp $args }
-function g { Load-Utilities; g $args }
-function gcom { Load-Utilities; gcom $args }
-function lazyg { Load-Utilities; lazyg $args }
-function sysinfo { Load-SystemNetwork; sysinfo $args }
-function flushdns { Load-SystemNetwork; flushdns $args }
-function cpy { Load-Utilities; cpy $args }
-function pst { Load-Utilities; pst $args }
+# Initialize zoxide
+if (Test-CommandExists zoxide) {
+    Invoke-Expression (& { (zoxide init pwsh | Out-String) })
+}
 
