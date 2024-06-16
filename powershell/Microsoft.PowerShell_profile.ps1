@@ -228,6 +228,7 @@ function prompt {
     } else {
         "$promptText  "
     }
+}
 
 # Admin check and prompt customization
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
