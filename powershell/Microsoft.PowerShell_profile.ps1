@@ -15,6 +15,7 @@ if (Test-Path($ChocolateyProfile)) {
     Import-Module "$ChocolateyProfile"
 }
 
+# Update the Profile Function with the correct URL
 function Update-Profile {
     if (-not $global:canConnectToGitHub) {
         Write-Host "Skipping profile update check due to GitHub.com not responding within 1 second." -ForegroundColor Yellow
@@ -22,6 +23,7 @@ function Update-Profile {
     }
 
     try {
+        # Replace the URL with your GitHub raw file URL
         $url = "https://raw.githubusercontent.com/Yanai-Klugman/dotfiles/main/powershell/Microsoft.PowerShell_profile.ps1"
         $oldhash = Get-FileHash $PROFILE
         Invoke-RestMethod $url -OutFile "$env:temp/Microsoft.PowerShell_profile.ps1"
@@ -37,7 +39,6 @@ function Update-Profile {
     }
 }
 Update-Profile
-#>
 
 function Update-PowerShell {
     if (-not $global:canConnectToGitHub) {
