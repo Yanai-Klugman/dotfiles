@@ -1,26 +1,27 @@
-# main.ps1
+# Set the base path for your PowerShell profile scripts
+$basePath = "$HOME\Documents\PowerShell"
 
 # Lazy loading modules
 function Load-Environment {
-    . "$PSScriptRoot/config/environment.ps1"
+    . "$basePath/config/environment.ps1"
     Remove-Item -Path function:Load-Environment
 }
 function Load-Utilities {
-    . "$PSScriptRoot/functions/core.ps1"
+    . "$basePath/functions/core.ps1"
     Remove-Item -Path function:Load-Utilities
 }
 function Load-Editor {
-    . "$PSScriptRoot/functions/editor.ps1"
+    . "$basePath/functions/editor.ps1"
     Remove-Item -Path function:Load-Editor
 }
 function Load-SystemNetwork {
-    . "$PSScriptRoot/functions/system_network.ps1"
+    . "$basePath/functions/system_network.ps1"
     Remove-Item -Path function:Load-SystemNetwork
 }
 
 # Load configuration scripts
-. "$PSScriptRoot/config/update.ps1"
-. "$PSScriptRoot/config/theme.ps1"
+. "$basePath/config/update.ps1"
+. "$basePath/config/theme.ps1"
 
 # Set up admin check and prompt customization
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
