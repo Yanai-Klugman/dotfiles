@@ -1,8 +1,5 @@
 # Microsoft.PowerShell_profile.ps1
 
-# Set the base path for your PowerShell profile scripts
-$basePath = "$HOME\Documents\PowerShell"
-
 # Function to check for command existence
 function Test-CommandExists {
     param ($command)
@@ -219,9 +216,6 @@ function docs { Set-Location -Path $HOME\Documents }
 function dtop { Set-Location -Path $HOME\Desktop }
 function ep { vim $PROFILE }
 
-# Load configuration scripts
-. "$basePath/config/theme.ps1"
-
 # Admin check and prompt customization
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 function prompt {
@@ -232,6 +226,24 @@ $Host.UI.RawUI.WindowTitle = "PowerShell {0}$adminSuffix" -f $PSVersionTable.PSV
 
 # Initialize zoxide
 if (Test-CommandExists zoxide) {
-    Invoke-Expression (& { (zoxide init pwsh | Out-String) })
+    Invoke-Expression (& { (zoxide init powershell | Out-String) })
+}
+
+# Initialize oh-my-posh with the Catppuccin Mocha theme
+if (Test-CommandExists oh-my-posh) {
+    oh-my-posh init pwsh --config https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/catppuccin_mocha.omp.json | Invoke-Expression
+}
+
+# Set PSReadLine colors for better readability
+Set-PSReadLineOption -Colors @{
+    Command = 'Yellow'
+    Parameter = 'Green'
+    String = 'DarkCyan'
+}
+
+# Configure ls color schemes to act like lsd
+if (Test-CommandExists ls) {
+    Set-Alias ls Get-ChildItem
+    $env:LS_COLORS = "di=34:ln=36:so=32:pi=33:ex=35:bd=34:cd=34:su=31:sg=31:tw=34:ow=34"
 }
 
