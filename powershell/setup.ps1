@@ -39,7 +39,7 @@ if (!(Test-Path -Path $PROFILE -PathType Leaf)) {
             New-Item -Path $profilePath -ItemType "directory"
         }
 
-        Invoke-RestMethod https://raw.githubusercontent.com/Yanai-Klugman/powershell-profile/main/main.ps1 -OutFile $PROFILE
+        Invoke-RestMethod https://raw.githubusercontent.com/Yanai-Klugman/dotfiles/main/powershell/main.ps1 -OutFile $PROFILE
         Write-Host "The profile @ [$PROFILE] has been created."
         Write-Host "If you want to add any persistent components, please do so at [$profilePath\Profile.ps1] as there is an updater in the installed profile which uses the hash to update the profile and will lead to loss of changes"
     }
@@ -50,7 +50,7 @@ if (!(Test-Path -Path $PROFILE -PathType Leaf)) {
 else {
     try {
         Get-Item -Path $PROFILE | Move-Item -Destination "$PROFILE.old" -Force
-        Invoke-RestMethod https://raw.githubusercontent.com/Yanai-Klugman/powershell-profile/main/main.ps1 -OutFile $PROFILE
+        Invoke-RestMethod https://raw.githubusercontent.com/Yanai-Klugman/dotfiles/main/powershell/main.ps1 -OutFile $PROFILE
         Write-Host "The profile @ [$PROFILE] has been updated and the old profile backed up."
         Write-Host "Please back up any persistent components of your old profile to [$HOME\Documents\PowerShell\Profile.ps1] as there is an updater in the installed profile which uses the hash to update the profile and will lead to loss of changes"
     }
