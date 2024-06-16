@@ -216,6 +216,19 @@ function docs { Set-Location -Path $HOME\Documents }
 function dtop { Set-Location -Path $HOME\Desktop }
 function ep { vim $PROFILE }
 
+# Custom display name
+$customPCName = "BDR"
+function prompt {
+    $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $location = Get-Location
+    $promptText = "$user@$customPCName $location"
+
+    if ($isAdmin) {
+        "$promptText # "
+    } else {
+        "$promptText  "
+    }
+
 # Admin check and prompt customization
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 function prompt {
