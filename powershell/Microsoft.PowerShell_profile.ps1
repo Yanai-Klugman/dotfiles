@@ -96,40 +96,25 @@ Set-EditorAlias
 # Lazy Load and Install Functions
 function LazyLoad-OhMyPosh {
     if (-not (Test-CommandExists oh-my-posh)) {
-        try {
+        Start-Job -ScriptBlock {
             sudo winget install -e --accept-source-agreements --accept-package-agreements JanDeDobbeleer.OhMyPosh
-        } catch {
-            Write-Error "Failed to install Oh My Posh. Error: $_"
-        }
-    }
-    if (Test-CommandExists oh-my-posh) {
-        oh-my-posh init pwsh --config https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/catppuccin_mocha.omp.json | Invoke-Expression
+        } | Out-Null
     }
 }
 
 function LazyLoad-TerminalIcons {
     if (-not (Get-Module -ListAvailable -Name Terminal-Icons)) {
-        try {
+        Start-Job -ScriptBlock {
             sudo Install-Module -Name Terminal-Icons -Repository PSGallery -Force
-        } catch {
-            Write-Error "Failed to install Terminal Icons module. Error: $_"
-        }
-    }
-    if (Get-Module -ListAvailable -Name Terminal-Icons) {
-        Import-Module -Name Terminal-Icons
+        } | Out-Null
     }
 }
 
 function LazyLoad-Zoxide {
     if (-not (Test-CommandExists zoxide)) {
-        try {
+        Start-Job -ScriptBlock {
             sudo winget install -e --id ajeetdsouza.zoxide
-        } catch {
-            Write-Error "Failed to install zoxide. Error: $_"
-        }
-    }
-    if (Test-CommandExists zoxide) {
-        Invoke-Expression (& { (zoxide init pwsh | Out-String) })
+        } | Out-Null
     }
 }
 
@@ -138,7 +123,7 @@ function LazyLoad-Font {
     $fontFamilies = (New-Object System.Drawing.Text.InstalledFontCollection).Families.Name
 
     if ($fontFamilies -notcontains "CaskaydiaCove NF") {
-        try {
+        Start-Job -ScriptBlock {
             sudo {
                 $webClient = New-Object System.Net.WebClient
                 $webClient.DownloadFile((New-Object System.Uri("https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/CascadiaCode.zip")), ".\CascadiaCode.zip")
@@ -154,11 +139,35 @@ function LazyLoad-Font {
                 Remove-Item -Path ".\CascadiaCode" -Recurse -Force
                 Remove-Item -Path ".\CascadiaCode.zip" -Force
             }
-        } catch {
-            Write-Error "Failed to download or install the Cascadia Code font. Error: $_"
-        }
+        } | Out-Null
     }
 }
+
+# Loading Animation Function
+function Show-LoadingAnimation {
+    $animationFrames = @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+    $frameCount = $animationFrames.Count
+    $i = 0
+    while ($true) {
+        Write-Host -NoNewline -ForegroundColor Cyan "`r$($animationFrames[$i % $frameCount]) Loading..."
+        Start-Sleep -Milliseconds 100
+        $i++
+    }
+}
+
+# Start background jobs and display loading animation
+$jobs = @()
+$jobs += Start-Job -ScriptBlock { LazyLoad-OhMyPosh }
+$jobs += Start-Job -ScriptBlock { LazyLoad-TerminalIcons }
+$jobs += Start-Job -ScriptBlock { LazyLoad-Zoxide }
+$jobs += Start-Job -ScriptBlock { LazyLoad-Font }
+
+$loadingJob = Start-Job -ScriptBlock { Show-LoadingAnimation }
+Wait-Job -Job $jobs
+Stop-Job -Job $loadingJob
+Remove-Job -Job $loadingJob
+
+Clear-Host
 
 # Utility Functions
 function touch {
@@ -302,12 +311,6 @@ $PSReadlineOption = @{
     TransientPromptEnabled = $true
 }
 Set-PSReadLineOption @PSReadlineOption
-
-# Lazy load and initialize tools
-LazyLoad-OhMyPosh
-LazyLoad-TerminalIcons
-LazyLoad-Zoxide
-LazyLoad-Font
 
 # Set window title after initializing tools
 $Host.UI.RawUI.WindowTitle = "PowerShell"
