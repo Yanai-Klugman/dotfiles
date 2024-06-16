@@ -39,21 +39,13 @@
         - mkcd <dir> : Create and navigate to <dir>
         - ep : Edit profile with default editor
         - sync-profile : Manually sync profile from GitHub
-    - Modern Features:
-        - wsl : Switch to WSL environment
-        - wt : Customize Windows Terminal (background images, acrylic effects, dynamic profiles)
-        - perfmon : Real-time performance monitoring and alerts
-        - edge <command> : Automate tasks in Microsoft Edge
-        - voice : Execute PowerShell tasks using voice commands
-        - widgets : Interact with and customize Windows 11 widgets
-        - aicode : AI-powered code assistance using Azure services
 #>
 
 # User Configurable Variables
 $profileUrl = "https://raw.githubusercontent.com/Yanai-Klugman/dotfiles/main/powershell/Microsoft.PowerShell_profile.ps1"
-$ohMyPoshThemeUrl = "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/catppuccin_mocha.omp.json"
-$useStarship = $false  # Set to $true to use starship instead of oh-my-posh
+$useStarship = $true
 $editor = ""
+$fontDownloadUrl = "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/CascadiaCode.zip"
 
 # Function to check for command existence
 function Test-CommandExists {
@@ -104,113 +96,94 @@ function Sync-Profile {
     }
 }
 
-# Lazy Load and Install Functions
-function LazyLoad-OhMyPosh {
-    if (-not (Test-CommandExists oh-my-posh)) {
+# Function to install missing dependencies
+function Install-Dependencies {
+    if (-not (Test-CommandExists winget)) {
+        Write-Warning "winget is not installed. Please install it manually."
+        exit
+    }
+
+    if (-not (Get-Module -ListAvailable -Name PowerShellGet)) {
         try {
-            sudo winget install -e --accept-source-agreements --accept-package-agreements JanDeDobbeleer.OhMyPosh
+            Install-Module -Name PowerShellGet -Force -Scope CurrentUser
         } catch {
-            Write-Error "Failed to install Oh My Posh. Error: $_"
+            Write-Error "Failed to install PowerShellGet. Error: $_"
+            exit
         }
     }
-}
 
-function LazyLoad-TerminalIcons {
+    if (-not (Get-Module -ListAvailable -Name PackageManagement)) {
+        try {
+            Install-Module -Name PackageManagement -Force -Scope CurrentUser
+        } catch {
+            Write-Error "Failed to install PackageManagement. Error: $_"
+            exit
+        }
+    }
+
+    if (-not (Get-Module -ListAvailable -Name PSReadLine)) {
+        try {
+            Install-Module -Name PSReadLine -Force -Scope CurrentUser
+        } catch {
+            Write-Error "Failed to install PSReadLine. Error: $_"
+            exit
+        }
+    }
+
+    if (-not (Test-CommandExists starship)) {
+        try {
+            winget install -e --id Starship.Starship
+        } catch {
+            Write-Error "Failed to install Starship. Error: $_"
+        }
+    }
+
     if (-not (Get-Module -ListAvailable -Name Terminal-Icons)) {
         try {
-            sudo Install-Module -Name Terminal-Icons -Repository PSGallery -Force
+            Install-Module -Name Terminal-Icons -Repository PSGallery -Force -Scope CurrentUser
         } catch {
             Write-Error "Failed to install Terminal Icons module. Error: $_"
         }
     }
-}
 
-function LazyLoad-Zoxide {
-    if (-not (Test-CommandExists zoxide)) {
-        try {
-            sudo winget install -e --id ajeetdsouza.zoxide
-        } catch {
-            Write-Error "Failed to install zoxide. Error: $_"
-        }
-    }
-}
-
-function LazyLoad-Font {
     [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
     $fontFamilies = (New-Object System.Drawing.Text.InstalledFontCollection).Families.Name
-
     if ($fontFamilies -notcontains "CaskaydiaCove NF") {
         try {
-            sudo {
-                $webClient = New-Object System.Net.WebClient
-                $webClient.DownloadFile((New-Object System.Uri("https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/CascadiaCode.zip")), ".\CascadiaCode.zip")
-                
-                Expand-Archive -Path ".\CascadiaCode.zip" -DestinationPath ".\CascadiaCode" -Force
-                $destination = (New-Object -ComObject Shell.Application).Namespace(0x14)
-                Get-ChildItem -Path ".\CascadiaCode" -Recurse -Filter "*.ttf" | ForEach-Object {
-                    If (-not(Test-Path "C:\Windows\Fonts\$($_.Name)")) {        
-                        $destination.CopyHere($_.FullName, 0x10)
-                    }
-                }
+            $webClient = New-Object System.Net.WebClient
+            $webClient.DownloadFile((New-Object System.Uri($fontDownloadUrl)), ".\CascadiaCode.zip")
 
-                Remove-Item -Path ".\CascadiaCode" -Recurse -Force
-                Remove-Item -Path ".\CascadiaCode.zip" -Force
+            Expand-Archive -Path ".\CascadiaCode.zip" -DestinationPath ".\CascadiaCode" -Force
+            $destination = (New-Object -ComObject Shell.Application).Namespace(0x14)
+            Get-ChildItem -Path ".\CascadiaCode" -Recurse -Filter "*.ttf" | ForEach-Object {
+                If (-not(Test-Path "C:\Windows\Fonts\$($_.Name)")) {
+                    $destination.CopyHere($_.FullName, 0x10)
+                }
             }
+
+            Remove-Item -Path ".\CascadiaCode" -Recurse -Force
+            Remove-Item -Path ".\CascadiaCode.zip" -Force
         } catch {
             Write-Error "Failed to download or install the Cascadia Code font. Error: $_"
         }
     }
 }
 
-function LazyLoad-Starship {
-    if (-not (Test-CommandExists starship)) {
-        try {
-            sudo winget install -e --id Starship.Starship
-        } catch {
-            Write-Error "Failed to install Starship. Error: $_"
-        }
-    }
-}
+# Install dependencies
+Install-Dependencies
 
-# Function to initialize prompt
+# Function to initialize prompt with starship and enable transient prompt
 function Initialize-Prompt {
     if ($useStarship) {
         if (Test-CommandExists starship) {
-            starship init pwsh --print-full-init | Invoke-Expression
-        }
-    } else {
-        if (Test-CommandExists oh-my-posh) {
-            oh-my-posh init pwsh --config $ohMyPoshThemeUrl | Invoke-Expression
+            Invoke-Expression (&starship init powershell)
+            function Invoke-Starship-TransientFunction {
+                &starship module character
+            }
+            Enable-TransientPrompt
         }
     }
 }
-
-# Loading Animation Function
-function Show-LoadingAnimation {
-    $animationFrames = @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
-    $frameCount = $animationFrames.Count
-    $i = 0
-    while ($true) {
-        Write-Host -NoNewline -ForegroundColor Cyan "`r$($animationFrames[$i % $frameCount]) Loading..."
-        Start-Sleep -Milliseconds 100
-        $i++
-    }
-}
-
-# Start background jobs and display loading animation
-$jobs = @()
-$jobs += Start-Job -ScriptBlock { LazyLoad-OhMyPosh }
-$jobs += Start-Job -ScriptBlock { LazyLoad-TerminalIcons }
-$jobs += Start-Job -ScriptBlock { LazyLoad-Zoxide }
-$jobs += Start-Job -ScriptBlock { LazyLoad-Font }
-$jobs += Start-Job -ScriptBlock { LazyLoad-Starship }
-
-$loadingJob = Start-Job -ScriptBlock { Show-LoadingAnimation }
-Wait-Job -Job $jobs
-Stop-Job -Job $loadingJob
-Remove-Job -Job $loadingJob
-
-Clear-Host
 
 # Utility Functions
 function touch {
@@ -342,28 +315,19 @@ function k9 { Stop-Process -Name $args[0] }
 
 function ep { & $editor $PROFILE }
 
-# Enable transient prompt
-$PSReadlineOption = @{
-    ContinuationPrompt = '>> '
-    HistorySearchCursorMovesToEnd = $true
-    HistorySaveStyle = 'SaveIncrementally'
-    HistoryNoDuplicates = $true
-    HistorySearchCaseSensitive = $false
-    HistorySavePath = (Join-Path -Path $HOME -ChildPath '.config\powershell\PSReadline\PSReadlineHistory.txt')
-    PromptText = '>'
-    TransientPromptEnabled = $true
+# Enable transient prompt and other PSReadLine options
+try {
+    Set-PSReadLineOption -ContinuationPrompt '>> ' -HistorySearchCursorMovesToEnd $true -HistorySaveStyle SaveIncrementally -HistoryNoDuplicates $true -HistorySearchCaseSensitive $false -HistorySavePath (Join-Path -Path $HOME -ChildPath '.config\powershell\PSReadline\PSReadlineHistory.txt') -Colors @{
+        Command = 'Yellow'
+        Parameter = 'Green'
+        String = 'DarkCyan'
+    }
+} catch {
+    Write-Warning "PSReadLine option not supported. Ensure you have the latest version installed."
 }
-Set-PSReadLineOption @PSReadlineOption
 
 # Set window title after initializing tools
 $Host.UI.RawUI.WindowTitle = "PowerShell"
-
-# Set PSReadLine colors for better readability
-Set-PSReadLineOption -Colors @{
-    Command = 'Yellow'
-    Parameter = 'Green'
-    String = 'DarkCyan'
-}
 
 # Import Terminal-Icons module (if not already imported)
 if (-not (Get-Module -Name Terminal-Icons)) {
@@ -379,9 +343,9 @@ $function:prompt = {
 }
 
 # Alias Definitions
-Set-Alias docs Set-Location
-Set-Alias dtop Set-Location
-Set-Alias dev { Set-Location -Path D:\ }
+Set-Alias -Name docs -Value { Set-Location -Path $HOME\Documents }
+Set-Alias -Name dtop -Value { Set-Location -Path $HOME\Desktop }
+Set-Alias -Name dev -Value { Set-Location -Path D:\ }
 
 # Manual Sync Command with Progress Output
 function sync-profile {
@@ -414,7 +378,6 @@ function sync-profile {
 # Initialize deferred loading and animation
 function Initialize-DeferredLoading {
     $jobs = @()
-    $jobs += Start-Job -ScriptBlock { LazyLoad-OhMyPosh }
     $jobs += Start-Job -ScriptBlock { LazyLoad-TerminalIcons }
     $jobs += Start-Job -ScriptBlock { LazyLoad-Zoxide }
     $jobs += Start-Job -ScriptBlock { LazyLoad-Font }
@@ -431,124 +394,3 @@ function Initialize-DeferredLoading {
 
 # Start deferred loading
 Initialize-DeferredLoading
-
-# Modern Features
-
-# Switch to WSL environment
-function wsl {
-    if ($IsWindows) {
-        wsl.exe
-    } else {
-        Write-Host "This command is only available on Windows."
-    }
-}
-
-# Customize Windows Terminal
-function wt {
-    param (
-        [string]$backgroundImage,
-        [string]$acrylic = $false,
-        [string]$dynamicProfile
-    )
-
-    $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
-
-    if (-not (Test-Path $wtSettingsPath)) {
-        Write-Error "Windows Terminal settings file not found."
-        return
-    }
-
-    $settings = Get-Content $wtSettingsPath | ConvertFrom-Json
-
-    if ($backgroundImage) {
-        $settings.profiles.defaults.backgroundImage = $backgroundImage
-    }
-
-    if ($acrylic -eq $true) {
-        $settings.profiles.defaults.useAcrylic = $true
-        $settings.profiles.defaults.acrylicOpacity = 0.8
-    }
-
-    if ($dynamicProfile) {
-        $settings.profiles.list += @{
-            name = "Dynamic Profile"
-            commandline = $dynamicProfile
-            hidden = $false
-        }
-    }
-
-    $settings | ConvertTo-Json -Depth 100 | Set-Content $wtSettingsPath
-    Write-Host "Windows Terminal settings updated. Please restart Windows Terminal to apply changes."
-}
-
-# Real-time performance monitoring and alerts
-function perfmon {
-    param (
-        [string]$counter = "\Processor(_Total)\% Processor Time",
-        [int]$threshold = 80
-    )
-
-    $counterSample = Get-Counter -Counter $counter -SampleInterval 1 -MaxSamples 10
-    $average = ($counterSample.CounterSamples.CookedValue | Measure-Object -Average).Average
-
-    if ($average -gt $threshold) {
-        Write-Warning "Performance threshold exceeded: $average%"
-    } else {
-        Write-Host "Performance is within acceptable range: $average%"
-    }
-}
-
-# Automate tasks in Microsoft Edge
-function edge {
-    param (
-        [string]$command
-    )
-
-    if (-not (Test-CommandExists msedge)) {
-        Write-Error "Microsoft Edge is not installed."
-        return
-    }
-
-    switch ($command) {
-        "open" { Start-Process "msedge.exe" }
-        "close" { Stop-Process -Name "msedge" -Force }
-        "new-tab" { Start-Process "msedge.exe" -ArgumentList "--new-tab" }
-        default { Write-Host "Unknown command: $command" }
-    }
-}
-
-# Execute PowerShell tasks using voice commands
-function voice {
-    param (
-        [string]$command
-    )
-
-    if (-not (Test-CommandExists "speech")) {
-        Write-Error "Windows Speech Recognition is not enabled."
-        return
-    }
-
-    Write-Host "Listening for voice command: $command"
-    # Placeholder for voice command implementation
-}
-
-# Interact with and customize Windows 11 widgets
-function widgets {
-    param (
-        [string]$widgetName,
-        [string]$action = "show"
-    )
-
-    # Placeholder for widget interaction implementation
-    Write-Host "Performing action '$action' on widget '$widgetName'."
-}
-
-# AI-powered code assistance using Azure services
-function aicode {
-    param (
-        [string]$codeSnippet
-    )
-
-    # Placeholder for AI-powered code assistance implementation
-    Write-Host "Analyzing code snippet using Azure AI services."
-}
