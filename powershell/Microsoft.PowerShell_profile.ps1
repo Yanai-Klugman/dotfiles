@@ -247,14 +247,4 @@ if (-not (Get-Module -ListAvailable -Name Terminal-Icons)) {
 }
 Import-Module -Name Terminal-Icons
 
-# Configure ls alias to use Terminal-Icons
-if (Test-CommandExists ls) {
-    Set-Alias ls Get-ChildItem
-    $env:LS_COLORS = "di=34:ln=36:so=32:pi=33:ex=35:bd=34:cd=34:su=31:sg=31:tw=34:ow=34"
-    Set-PSReadLineOption -Colors @{
-        Command  = 'Yellow'
-        Parameter = 'Green'
-        String   = 'DarkCyan'
-    }
-}
 
