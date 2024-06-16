@@ -31,9 +31,11 @@ function Update-Profile {
         if ($newhash.Hash -ne $oldhash.Hash) {
             Copy-Item -Path "$env:temp/Microsoft.PowerShell_profile.ps1" -Destination $PROFILE -Force
             Write-Host "Profile has been updated. Please restart your shell to reflect changes" -ForegroundColor Magenta
+        } else {
+            Write-Host "Profile is already up to date." -ForegroundColor Green
         }
     } catch {
-        Write-Error "Unable to check for `$profile updates"
+        Write-Error "Unable to check for $profile updates. Error: $_"
     } finally {
         Remove-Item "$env:temp/Microsoft.PowerShell_profile.ps1" -ErrorAction SilentlyContinue
     }
