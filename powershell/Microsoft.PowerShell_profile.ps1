@@ -231,7 +231,7 @@ if (Test-CommandExists zoxide) {
 
 # Initialize oh-my-posh with the Catppuccin Mocha theme
 if (Test-CommandExists oh-my-posh) {
-    oh-my-posh init pwsh --config https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/catppuccin_mocha.omp.json | Invoke-Expression
+    oh-my-posh init powershell --config https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/catppuccin_mocha.omp.json | Invoke-Expression
 }
 
 # Set PSReadLine colors for better readability
