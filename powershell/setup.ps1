@@ -1,120 +1,117 @@
-# Microsoft.PowerShell_profile.ps1
+# setup.ps1
 
-# Function to check for command existence
-function Test-CommandExists {
-    param ($command)
-    $null -ne (Get-Command $command -ErrorAction SilentlyContinue)
+# Ensure the script runs with elevated privileges
+if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Warning "Please run this script as an Administrator!"
+    exit
 }
 
-# Function to set editor alias
-function Set-EditorAlias {
-    $EDITOR = if (Test-CommandExists nvim) { 'nvim' }
-              elseif (Test-CommandExists pvim) { 'pvim' }
-              elseif (Test-CommandExists vim) { 'vim' }
-              elseif (Test-CommandExists vi) { 'vi' }
-              elseif (Test-CommandExists code) { 'code' }
-              elseif (Test-CommandExists notepad++) { 'notepad++' }
-              elseif (Test-CommandExists sublime_text) { 'sublime_text' }
-              else { 'notepad' }
-    Set-Alias -Name vim -Value $EDITOR
-}
-
-# Editor Configuration
-Set-EditorAlias
-
-# Utility Functions
-function touch { param ($file) "" | Out-File $file -Encoding ASCII }
-function ff { param ($name) Get-ChildItem -Recurse -Filter "*${name}*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Output "$($_.Directory)\$($_.Name)" } }
-function hb {
-    param ($filePath)
-    if (-not (Test-Path $filePath)) { Write-Error "File path does not exist."; return }
-    $content = Get-Content $filePath -Raw
-    $uri = "http://bin.christitus.com/documents"
+# Function to test internet connectivity
+function Test-InternetConnection {
     try {
-        $response = Invoke-RestMethod -Uri $uri -Method Post -Body $content -ErrorAction Stop
-        $url = "http://bin.christitus.com/$($response.key)"
-        Write-Output $url
-    } catch { Write-Error "Failed to upload the document. Error: $_" }
-}
-function grep { param ($regex, $dir) if ($dir) { Get-ChildItem $dir | Select-String $regex } else { $input | Select-String $regex } }
-function sed { param ($file, $find, $replace) (Get-Content $file).replace("$find", $replace) | Set-Content $file }
-function which { param ($name) Get-Command $name | Select-Object -ExpandProperty Definition }
-function export { param ($name, $value) Set-Item -Force -Path "env:$name" -Value $value }
-function head { param ($path, $n = 10) Get-Content $path -Head $n }
-function tail { param ($path, $n = 10) Get-Content $path -Tail $n }
-function la { Get-ChildItem -Path . -Force | Format-Table -AutoSize }
-function ll { Get-ChildItem -Path . -Force -Hidden | Format-Table -AutoSize }
-function gs { git status }
-function ga { git add . }
-function gc { param ($m) git commit -m "$m" }
-function gp { git push }
-function g { z Github }
-function gcom { git add .; git commit -m "$args" }
-function lazyg { git add .; git commit -m "$args"; git push }
-function cpy { param ($text) Set-Clipboard $text }
-function pst { Get-Clipboard }
-function docs { Set-Location -Path $HOME\Documents }
-function dtop { Set-Location -Path $HOME\Desktop }
-function uptime {
-    if ($PSVersionTable.PSVersion.Major -eq 5) {
-        Get-WmiObject win32_operatingsystem | Select-Object @{Name='LastBootUpTime'; Expression={$_.ConverttoDateTime($_.lastbootuptime)}} | Format-Table -HideTableHeaders
-    } else {
-        net statistics workstation | Select-String "since" | ForEach-Object { $_.ToString().Replace('Statistics since ', '') }
+        $testConnection = Test-Connection -ComputerName www.google.com -Count 1 -ErrorAction Stop
+        return $true
     }
-}
-function reload-profile { & $profile }
-function unzip { param ($file) Expand-Archive -Path $file -DestinationPath $pwd }
-function pkill { Get-Process $args[0] -ErrorAction SilentlyContinue | Stop-Process }
-function pgrep { Get-Process $args[0] }
-function nf { param ($name) New-Item -ItemType "file" -Path . -Name $name }
-function mkcd { param ($dir) mkdir $dir -Force; Set-Location $dir }
-function sysinfo { Get-ComputerInfo }
-function df { get-volume }
-function Get-PubIP { (Invoke-WebRequest http://ifconfig.me/ip).Content }
-function flushdns { Clear-DnsClientCache }
-function k9 { Stop-Process -Name $args[0] }
-function ep { vim $PROFILE }
-
-# Custom display name
-$customPCName = "BDR"
-function prompt {
-    $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-    $location = Get-Location
-    $promptText = " $user $location"
-
-    if ($isAdmin) {
-        "$promptText `n# "
-    } else {
-        "$promptText `n "
+    catch {
+        Write-Warning "Internet connection is required but not available. Please check your connection."
+        return $false
     }
 }
 
-# Admin check and prompt customization
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-$adminSuffix = if ($isAdmin) { " [ADMIN]" } else { "" }
-
-# Initialize oh-my-posh
-if (Test-CommandExists oh-my-posh) {
-    oh-my-posh init powershell --config https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/catppuccin_mocha.omp.json | Invoke-Expression
+# Check for internet connectivity before proceeding
+if (-not (Test-InternetConnection)) {
+    exit
 }
 
-# Set window title after initializing oh-my-posh
-$Host.UI.RawUI.WindowTitle = "PowerShell$adminSuffix"
+# Profile creation or update
+if (!(Test-Path -Path $PROFILE -PathType Leaf)) {
+    try {
+        # Detect Version of PowerShell & Create Profile directories if they do not exist.
+        $profilePath = ""
+        if ($PSVersionTable.PSEdition -eq "Core") { 
+            $profilePath = "$env:userprofile\Documents\Powershell"
+        }
+        elseif ($PSVersionTable.PSEdition -eq "Desktop") {
+            $profilePath = "$env:userprofile\Documents\WindowsPowerShell"
+        }
 
-# Initialize zoxide
-if (Test-CommandExists zoxide) {
-    Invoke-Expression (& { (zoxide init powershell | Out-String) })
+        if (!(Test-Path -Path $profilePath)) {
+            New-Item -Path $profilePath -ItemType "directory"
+        }
+
+        Invoke-RestMethod https://raw.githubusercontent.com/Yanai-Klugman/dotfiles/main/powershell/Microsoft.PowerShell_profile.ps1 -OutFile $PROFILE
+        Write-Host "The profile @ [$PROFILE] has been created."
+        Write-Host "If you want to add any persistent components, please do so at [$profilePath\Profile.ps1] as there is an updater in the installed profile which uses the hash to update the profile and will lead to loss of changes"
+    }
+    catch {
+        Write-Error "Failed to create or update the profile. Error: $_"
+    }
+}
+else {
+    try {
+        Get-Item -Path $PROFILE | Move-Item -Destination "$PROFILE.old" -Force
+        Invoke-RestMethod https://raw.githubusercontent.com/Yanai-Klugman/dotfiles/main/powershell/Microsoft.PowerShell_profile.ps1 -OutFile $PROFILE
+        Write-Host "The profile @ [$PROFILE] has been updated and the old profile backed up."
+        Write-Host "Please back up any persistent components of your old profile to [$HOME\Documents\PowerShell\Profile.ps1] as there is an updater in the installed profile which uses the hash to update the profile and will lead to loss of changes"
+    }
+    catch {
+        Write-Error "Failed to backup and update the profile. Error: $_"
+    }
 }
 
-# Set PSReadLine colors for better readability
-Set-PSReadLineOption -Colors @{
-    Command = 'Yellow'
-    Parameter = 'Green'
-    String = 'DarkCyan'
+# Install Oh My Posh
+try {
+    winget install -e --accept-source-agreements --accept-package-agreements JanDeDobbeleer.OhMyPosh
+}
+catch {
+    Write-Error "Failed to install Oh My Posh. Error: $_"
 }
 
-# Import Terminal-Icons module
-if (-not (Get-Module -ListAvailable -Name Terminal-Icons)) {
-    Install-Module -Name Terminal-Icons -Scope CurrentUser -Force -SkipPublisherCheck
+# Install Terminal Icons
+try {
+    Install-Module -Name Terminal-Icons -Repository PSGallery -Force
 }
-Import-Module -Name Terminal-Icons
+catch {
+    Write-Error "Failed to install Terminal Icons module. Error: $_"
+}
+
+# Install zoxide
+try {
+    winget install -e --id ajeetdsouza.zoxide
+    Write-Host "zoxide installed successfully."
+}
+catch {
+    Write-Error "Failed to install zoxide. Error: $_"
+}
+
+# Font Install
+try {
+    [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
+    $fontFamilies = (New-Object System.Drawing.Text.InstalledFontCollection).Families.Name
+
+    if ($fontFamilies -notcontains "CaskaydiaCove NF") {
+        $webClient = New-Object System.Net.WebClient
+        $webClient.DownloadFile((New-Object System.Uri("https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/CascadiaCode.zip")), ".\CascadiaCode.zip")
+        
+        Expand-Archive -Path ".\CascadiaCode.zip" -DestinationPath ".\CascadiaCode" -Force
+        $destination = (New-Object -ComObject Shell.Application).Namespace(0x14)
+        Get-ChildItem -Path ".\CascadiaCode" -Recurse -Filter "*.ttf" | ForEach-Object {
+            If (-not(Test-Path "C:\Windows\Fonts\$($_.Name)")) {        
+                $destination.CopyHere($_.FullName, 0x10)
+            }
+        }
+
+        Remove-Item -Path ".\CascadiaCode" -Recurse -Force
+        Remove-Item -Path ".\CascadiaCode.zip" -Force
+    }
+}
+catch {
+    Write-Error "Failed to download or install the Cascadia Code font. Error: $_"
+}
+
+# Final check and message to the user
+if ((Test-Path -Path $PROFILE) -and (winget list --name "OhMyPosh" -e) -and ($fontFamilies -contains "CaskaydiaCove NF")) {
+    Write-Host "Setup completed successfully. Please restart your PowerShell session to apply changes."
+} else {
+    Write-Warning "Setup completed with errors. Please check the error messages above."
+}
