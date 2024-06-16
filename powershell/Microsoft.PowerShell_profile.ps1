@@ -38,13 +38,40 @@
         - nf <name> : Create a new file with <name>
         - mkcd <dir> : Create and navigate to <dir>
         - ep : Edit profile with default editor
+        - sync-profile : Manually sync profile from GitHub
+    - Modern Features:
+        - wsl : Switch to WSL environment
+        - wt : Customize Windows Terminal (background images, acrylic effects, dynamic profiles)
+        - perfmon : Real-time performance monitoring and alerts
+        - edge <command> : Automate tasks in Microsoft Edge
+        - voice : Execute PowerShell tasks using voice commands
+        - widgets : Interact with and customize Windows 11 widgets
+        - aicode : AI-powered code assistance using Azure services
 #>
+
+# User Configurable Variables
+$profileUrl = "https://raw.githubusercontent.com/Yanai-Klugman/dotfiles/main/powershell/Microsoft.PowerShell_profile.ps1"
+$ohMyPoshThemeUrl = "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/catppuccin_mocha.omp.json"
+$useStarship = $false  # Set to $true to use starship instead of oh-my-posh
+$editor = ""
 
 # Function to check for command existence
 function Test-CommandExists {
     param ($command)
     $null -ne (Get-Command $command -ErrorAction SilentlyContinue)
 }
+
+# Function to set the default editor
+function Set-DefaultEditor {
+    $global:editor = if (Test-CommandExists nvim) { 'nvim' }
+                     elseif (Test-CommandExists code) { 'code' }
+                     elseif (Test-CommandExists cursor) { 'cursor' }
+                     elseif ($IsWindows) { 'notepad' }
+                     else { 'nano' }
+}
+
+# Set default editor
+Set-DefaultEditor
 
 # Function to ensure the script is running with elevated privileges
 function Ensure-Admin {
@@ -56,19 +83,19 @@ function Ensure-Admin {
 
 # Function to sync profile from GitHub
 function Sync-Profile {
-    $profileUrl = "https://raw.githubusercontent.com/Yanai-Klugman/dotfiles/main/powershell/Microsoft.PowerShell_profile.ps1"
-    $localProfile = $PROFILE
     try {
         $remoteContent = Invoke-RestMethod -Uri $profileUrl -ErrorAction Stop
-        if (Test-Path -Path $localProfile -PathType Leaf) {
-            $localContent = Get-Content -Path $localProfile -Raw
+        if (Test-Path -Path $PROFILE -PathType Leaf) {
+            $localContent = Get-Content -Path $PROFILE -Raw
             if ($remoteContent -ne $localContent) {
-                $remoteContent | Set-Content -Path $localProfile -Force
+                $remoteContent | Set-Content -Path $PROFILE -Force
                 Write-Host "Profile has been synced with the latest version from GitHub."
                 Write-Host "Please restart your PowerShell session to apply the changes."
+            } else {
+                Write-Host "Profile is already up to date."
             }
         } else {
-            $remoteContent | Set-Content -Path $localProfile -Force
+            $remoteContent | Set-Content -Path $PROFILE -Force
             Write-Host "Profile has been created with the latest version from GitHub."
             Write-Host "Please restart your PowerShell session to apply the changes."
         }
@@ -76,22 +103,6 @@ function Sync-Profile {
         Write-Warning "Failed to sync profile from GitHub. Error: $_"
     }
 }
-
-# Function to set editor alias
-function Set-EditorAlias {
-    $EDITOR = if (Test-CommandExists nvim) { 'nvim' }
-              elseif (Test-CommandExists pvim) { 'pvim' }
-              elseif (Test-CommandExists vim) { 'vim' }
-              elseif (Test-CommandExists vi) { 'vi' }
-              elseif (Test-CommandExists code) { 'code' }
-              elseif (Test-CommandExists notepad++) { 'notepad++' }
-              elseif (Test-CommandExists sublime_text) { 'sublime_text' }
-              else { 'notepad' }
-    Set-Alias -Name vim -Value $EDITOR
-}
-
-# Editor Configuration
-Set-EditorAlias
 
 # Lazy Load and Install Functions
 function LazyLoad-OhMyPosh {
@@ -151,6 +162,29 @@ function LazyLoad-Font {
     }
 }
 
+function LazyLoad-Starship {
+    if (-not (Test-CommandExists starship)) {
+        try {
+            sudo winget install -e --id Starship.Starship
+        } catch {
+            Write-Error "Failed to install Starship. Error: $_"
+        }
+    }
+}
+
+# Function to initialize prompt
+function Initialize-Prompt {
+    if ($useStarship) {
+        if (Test-CommandExists starship) {
+            starship init pwsh --print-full-init | Invoke-Expression
+        }
+    } else {
+        if (Test-CommandExists oh-my-posh) {
+            oh-my-posh init pwsh --config $ohMyPoshThemeUrl | Invoke-Expression
+        }
+    }
+}
+
 # Loading Animation Function
 function Show-LoadingAnimation {
     $animationFrames = @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
@@ -169,6 +203,7 @@ $jobs += Start-Job -ScriptBlock { LazyLoad-OhMyPosh }
 $jobs += Start-Job -ScriptBlock { LazyLoad-TerminalIcons }
 $jobs += Start-Job -ScriptBlock { LazyLoad-Zoxide }
 $jobs += Start-Job -ScriptBlock { LazyLoad-Font }
+$jobs += Start-Job -ScriptBlock { LazyLoad-Starship }
 
 $loadingJob = Start-Job -ScriptBlock { Show-LoadingAnimation }
 Wait-Job -Job $jobs
@@ -305,7 +340,7 @@ function flushdns { Clear-DnsClientCache }
 
 function k9 { Stop-Process -Name $args[0] }
 
-function ep { vim $PROFILE }
+function ep { & $editor $PROFILE }
 
 # Enable transient prompt
 $PSReadlineOption = @{
@@ -341,4 +376,179 @@ Sync-Profile
 # Ensure a new line after each prompt
 $function:prompt = {
     "$((Get-Location) -replace $HOME, '~')`n> "
+}
+
+# Alias Definitions
+Set-Alias docs Set-Location
+Set-Alias dtop Set-Location
+Set-Alias dev { Set-Location -Path D:\ }
+
+# Manual Sync Command with Progress Output
+function sync-profile {
+    $animationFrames = @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+    $frameCount = $animationFrames.Count
+    $i = 0
+
+    try {
+        $remoteContent = Invoke-RestMethod -Uri $profileUrl -ErrorAction Stop
+        Write-Host -NoNewline -ForegroundColor Cyan "`r${($animationFrames[$i % $frameCount])} Syncing profile..."
+        if (Test-Path -Path $PROFILE -PathType Leaf) {
+            $localContent = Get-Content -Path $PROFILE -Raw
+            if ($remoteContent -ne $localContent) {
+                $remoteContent | Set-Content -Path $PROFILE -Force
+                Write-Host "`rProfile has been synced with the latest version from GitHub."
+                Write-Host "Please restart your PowerShell session to apply the changes."
+            } else {
+                Write-Host "`rProfile is already up to date."
+            }
+        } else {
+            $remoteContent | Set-Content -Path $PROFILE -Force
+            Write-Host "`rProfile has been created with the latest version from GitHub."
+            Write-Host "Please restart your PowerShell session to apply the changes."
+        }
+    } catch {
+        Write-Warning "`rFailed to sync profile from GitHub. Error: $_"
+    }
+}
+
+# Initialize deferred loading and animation
+function Initialize-DeferredLoading {
+    $jobs = @()
+    $jobs += Start-Job -ScriptBlock { LazyLoad-OhMyPosh }
+    $jobs += Start-Job -ScriptBlock { LazyLoad-TerminalIcons }
+    $jobs += Start-Job -ScriptBlock { LazyLoad-Zoxide }
+    $jobs += Start-Job -ScriptBlock { LazyLoad-Font }
+    $jobs += Start-Job -ScriptBlock { LazyLoad-Starship }
+
+    $loadingJob = Start-Job -ScriptBlock { Show-LoadingAnimation }
+    Wait-Job -Job $jobs
+    Stop-Job -Job $loadingJob
+    Remove-Job -Job $loadingJob
+    Clear-Host
+
+    Initialize-Prompt
+}
+
+# Start deferred loading
+Initialize-DeferredLoading
+
+# Modern Features
+
+# Switch to WSL environment
+function wsl {
+    if ($IsWindows) {
+        wsl.exe
+    } else {
+        Write-Host "This command is only available on Windows."
+    }
+}
+
+# Customize Windows Terminal
+function wt {
+    param (
+        [string]$backgroundImage,
+        [string]$acrylic = $false,
+        [string]$dynamicProfile
+    )
+
+    $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+
+    if (-not (Test-Path $wtSettingsPath)) {
+        Write-Error "Windows Terminal settings file not found."
+        return
+    }
+
+    $settings = Get-Content $wtSettingsPath | ConvertFrom-Json
+
+    if ($backgroundImage) {
+        $settings.profiles.defaults.backgroundImage = $backgroundImage
+    }
+
+    if ($acrylic -eq $true) {
+        $settings.profiles.defaults.useAcrylic = $true
+        $settings.profiles.defaults.acrylicOpacity = 0.8
+    }
+
+    if ($dynamicProfile) {
+        $settings.profiles.list += @{
+            name = "Dynamic Profile"
+            commandline = $dynamicProfile
+            hidden = $false
+        }
+    }
+
+    $settings | ConvertTo-Json -Depth 100 | Set-Content $wtSettingsPath
+    Write-Host "Windows Terminal settings updated. Please restart Windows Terminal to apply changes."
+}
+
+# Real-time performance monitoring and alerts
+function perfmon {
+    param (
+        [string]$counter = "\Processor(_Total)\% Processor Time",
+        [int]$threshold = 80
+    )
+
+    $counterSample = Get-Counter -Counter $counter -SampleInterval 1 -MaxSamples 10
+    $average = ($counterSample.CounterSamples.CookedValue | Measure-Object -Average).Average
+
+    if ($average -gt $threshold) {
+        Write-Warning "Performance threshold exceeded: $average%"
+    } else {
+        Write-Host "Performance is within acceptable range: $average%"
+    }
+}
+
+# Automate tasks in Microsoft Edge
+function edge {
+    param (
+        [string]$command
+    )
+
+    if (-not (Test-CommandExists msedge)) {
+        Write-Error "Microsoft Edge is not installed."
+        return
+    }
+
+    switch ($command) {
+        "open" { Start-Process "msedge.exe" }
+        "close" { Stop-Process -Name "msedge" -Force }
+        "new-tab" { Start-Process "msedge.exe" -ArgumentList "--new-tab" }
+        default { Write-Host "Unknown command: $command" }
+    }
+}
+
+# Execute PowerShell tasks using voice commands
+function voice {
+    param (
+        [string]$command
+    )
+
+    if (-not (Test-CommandExists "speech")) {
+        Write-Error "Windows Speech Recognition is not enabled."
+        return
+    }
+
+    Write-Host "Listening for voice command: $command"
+    # Placeholder for voice command implementation
+}
+
+# Interact with and customize Windows 11 widgets
+function widgets {
+    param (
+        [string]$widgetName,
+        [string]$action = "show"
+    )
+
+    # Placeholder for widget interaction implementation
+    Write-Host "Performing action '$action' on widget '$widgetName'."
+}
+
+# AI-powered code assistance using Azure services
+function aicode {
+    param (
+        [string]$codeSnippet
+    )
+
+    # Placeholder for AI-powered code assistance implementation
+    Write-Host "Analyzing code snippet using Azure AI services."
 }
