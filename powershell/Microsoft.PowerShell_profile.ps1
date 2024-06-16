@@ -96,25 +96,31 @@ Set-EditorAlias
 # Lazy Load and Install Functions
 function LazyLoad-OhMyPosh {
     if (-not (Test-CommandExists oh-my-posh)) {
-        Start-Job -ScriptBlock {
+        try {
             sudo winget install -e --accept-source-agreements --accept-package-agreements JanDeDobbeleer.OhMyPosh
-        } | Out-Null
+        } catch {
+            Write-Error "Failed to install Oh My Posh. Error: $_"
+        }
     }
 }
 
 function LazyLoad-TerminalIcons {
     if (-not (Get-Module -ListAvailable -Name Terminal-Icons)) {
-        Start-Job -ScriptBlock {
+        try {
             sudo Install-Module -Name Terminal-Icons -Repository PSGallery -Force
-        } | Out-Null
+        } catch {
+            Write-Error "Failed to install Terminal Icons module. Error: $_"
+        }
     }
 }
 
 function LazyLoad-Zoxide {
     if (-not (Test-CommandExists zoxide)) {
-        Start-Job -ScriptBlock {
+        try {
             sudo winget install -e --id ajeetdsouza.zoxide
-        } | Out-Null
+        } catch {
+            Write-Error "Failed to install zoxide. Error: $_"
+        }
     }
 }
 
@@ -123,7 +129,7 @@ function LazyLoad-Font {
     $fontFamilies = (New-Object System.Drawing.Text.InstalledFontCollection).Families.Name
 
     if ($fontFamilies -notcontains "CaskaydiaCove NF") {
-        Start-Job -ScriptBlock {
+        try {
             sudo {
                 $webClient = New-Object System.Net.WebClient
                 $webClient.DownloadFile((New-Object System.Uri("https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/CascadiaCode.zip")), ".\CascadiaCode.zip")
@@ -139,7 +145,9 @@ function LazyLoad-Font {
                 Remove-Item -Path ".\CascadiaCode" -Recurse -Force
                 Remove-Item -Path ".\CascadiaCode.zip" -Force
             }
-        } | Out-Null
+        } catch {
+            Write-Error "Failed to download or install the Cascadia Code font. Error: $_"
+        }
     }
 }
 
