@@ -1,3 +1,5 @@
+# Microsoft.PowerShell_profile.ps1
+
 <#
     Cheat Sheet:
     - Navigation:
@@ -36,32 +38,13 @@
         - nf <name> : Create a new file with <name>
         - mkcd <dir> : Create and navigate to <dir>
         - ep : Edit profile with default editor
-        - sync-profile : Manually sync profile from GitHub
 #>
-
-# User Configurable Variables
-$profileUrl = "https://raw.githubusercontent.com/Yanai-Klugman/dotfiles/main/powershell/Microsoft.PowerShell_profile.ps1"
-$useStarship = $true
-$editor = ""
-$fontDownloadUrl = "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/CascadiaCode.zip"
 
 # Function to check for command existence
 function Test-CommandExists {
     param ($command)
     $null -ne (Get-Command $command -ErrorAction SilentlyContinue)
 }
-
-# Function to set the default editor
-function Set-DefaultEditor {
-    $global:editor = if (Test-CommandExists nvim) { 'nvim' }
-                     elseif (Test-CommandExists code) { 'code' }
-                     elseif (Test-CommandExists cursor) { 'cursor' }
-                     elseif ($IsWindows) { 'notepad' }
-                     else { 'nano' }
-}
-
-# Set default editor
-Set-DefaultEditor
 
 # Function to ensure the script is running with elevated privileges
 function Ensure-Admin {
@@ -73,19 +56,19 @@ function Ensure-Admin {
 
 # Function to sync profile from GitHub
 function Sync-Profile {
+    $profileUrl = "https://raw.githubusercontent.com/Yanai-Klugman/dotfiles/main/powershell/Microsoft.PowerShell_profile.ps1"
+    $localProfile = $PROFILE
     try {
         $remoteContent = Invoke-RestMethod -Uri $profileUrl -ErrorAction Stop
-        if (Test-Path -Path $PROFILE -PathType Leaf) {
-            $localContent = Get-Content -Path $PROFILE -Raw
+        if (Test-Path -Path $localProfile -PathType Leaf) {
+            $localContent = Get-Content -Path $localProfile -Raw
             if ($remoteContent -ne $localContent) {
-                $remoteContent | Set-Content -Path $PROFILE -Force
+                $remoteContent | Set-Content -Path $localProfile -Force
                 Write-Host "Profile has been synced with the latest version from GitHub."
                 Write-Host "Please restart your PowerShell session to apply the changes."
-            } else {
-                Write-Host "Profile is already up to date."
             }
         } else {
-            $remoteContent | Set-Content -Path $PROFILE -Force
+            $remoteContent | Set-Content -Path $localProfile -Force
             Write-Host "Profile has been created with the latest version from GitHub."
             Write-Host "Please restart your PowerShell session to apply the changes."
         }
@@ -94,91 +77,85 @@ function Sync-Profile {
     }
 }
 
-# Function to install missing dependencies
-function Install-Dependencies {
-    if (-not (Test-CommandExists winget)) {
-        Write-Warning "winget is not installed. Please install it manually."
-        exit
-    }
+# Function to set editor alias
+function Set-EditorAlias {
+    $EDITOR = if (Test-CommandExists nvim) { 'nvim' }
+              elseif (Test-CommandExists pvim) { 'pvim' }
+              elseif (Test-CommandExists vim) { 'vim' }
+              elseif (Test-CommandExists vi) { 'vi' }
+              elseif (Test-CommandExists code) { 'code' }
+              elseif (Test-CommandExists notepad++) { 'notepad++' }
+              elseif (Test-CommandExists sublime_text) { 'sublime_text' }
+              else { 'notepad' }
+    Set-Alias -Name vim -Value $EDITOR
+}
 
-    if (-not (Get-Module -ListAvailable -Name PowerShellGet)) {
+# Editor Configuration
+Set-EditorAlias
+
+# Lazy Load and Install Functions
+function LazyLoad-OhMyPosh {
+    if (-not (Test-CommandExists oh-my-posh)) {
         try {
-            Install-Module -Name PowerShellGet -Force -Scope CurrentUser
+            sudo winget install -e --accept-source-agreements --accept-package-agreements JanDeDobbeleer.OhMyPosh
         } catch {
-            Write-Error "Failed to install PowerShellGet. Error: $_"
-            exit
+            Write-Error "Failed to install Oh My Posh. Error: $_"
         }
     }
-
-    if (-not (Get-Module -ListAvailable -Name PackageManagement)) {
-        try {
-            Install-Module -Name PackageManagement -Force -Scope CurrentUser
-        } catch {
-            Write-Error "Failed to install PackageManagement. Error: $_"
-            exit
-        }
+    if (Test-CommandExists oh-my-posh) {
+        oh-my-posh init pwsh --config https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/catppuccin_mocha.omp.json | Invoke-Expression
     }
+}
 
-    if (-not (Get-Module -ListAvailable -Name PSReadLine)) {
-        try {
-            Install-Module -Name PSReadLine -Force -Scope CurrentUser
-        } catch {
-            Write-Error "Failed to install PSReadLine. Error: $_"
-            exit
-        }
-    }
-
-    if (-not (Test-CommandExists starship)) {
-        try {
-            winget install -e --id Starship.Starship
-        } catch {
-            Write-Error "Failed to install Starship. Error: $_"
-        }
-    }
-
+function LazyLoad-TerminalIcons {
     if (-not (Get-Module -ListAvailable -Name Terminal-Icons)) {
         try {
-            Install-Module -Name Terminal-Icons -Repository PSGallery -Force -Scope CurrentUser
+            sudo Install-Module -Name Terminal-Icons -Repository PSGallery -Force
         } catch {
             Write-Error "Failed to install Terminal Icons module. Error: $_"
         }
     }
-
-    [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
-    $fontFamilies = (New-Object System.Drawing.Text.InstalledFontCollection).Families.Name
-    if ($fontFamilies -notcontains "CaskaydiaCove NF") {
-        try {
-            $webClient = New-Object System.Net.WebClient
-            $webClient.DownloadFile((New-Object System.Uri($fontDownloadUrl)), ".\CascadiaCode.zip")
-
-            Expand-Archive -Path ".\CascadiaCode.zip" -DestinationPath ".\CascadiaCode" -Force
-            $destination = (New-Object -ComObject Shell.Application).Namespace(0x14)
-            Get-ChildItem -Path ".\CascadiaCode" -Recurse -Filter "*.ttf" | ForEach-Object {
-                If (-not(Test-Path "C:\Windows\Fonts\$($_.Name)")) {
-                    $destination.CopyHere($_.FullName, 0x10)
-                }
-            }
-
-            Remove-Item -Path ".\CascadiaCode" -Recurse -Force
-            Remove-Item -Path ".\CascadiaCode.zip" -Force
-        } catch {
-            Write-Error "Failed to download or install the Cascadia Code font. Error: $_"
-        }
+    if (Get-Module -ListAvailable -Name Terminal-Icons) {
+        Import-Module -Name Terminal-Icons
     }
 }
 
-# Install dependencies
-Install-Dependencies
+function LazyLoad-Zoxide {
+    if (-not (Test-CommandExists zoxide)) {
+        try {
+            sudo winget install -e --id ajeetdsouza.zoxide
+        } catch {
+            Write-Error "Failed to install zoxide. Error: $_"
+        }
+    }
+    if (Test-CommandExists zoxide) {
+        Invoke-Expression (& { (zoxide init pwsh | Out-String) })
+    }
+}
 
-# Function to initialize prompt with starship and enable transient prompt
-function Initialize-Prompt {
-    if ($useStarship) {
-        if (Test-CommandExists starship) {
-            Invoke-Expression (&starship init powershell)
-            function Invoke-Starship-TransientFunction {
-                &starship module character
+function LazyLoad-Font {
+    [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
+    $fontFamilies = (New-Object System.Drawing.Text.InstalledFontCollection).Families.Name
+
+    if ($fontFamilies -notcontains "CaskaydiaCove NF") {
+        try {
+            sudo {
+                $webClient = New-Object System.Net.WebClient
+                $webClient.DownloadFile((New-Object System.Uri("https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/CascadiaCode.zip")), ".\CascadiaCode.zip")
+                
+                Expand-Archive -Path ".\CascadiaCode.zip" -DestinationPath ".\CascadiaCode" -Force
+                $destination = (New-Object -ComObject Shell.Application).Namespace(0x14)
+                Get-ChildItem -Path ".\CascadiaCode" -Recurse -Filter "*.ttf" | ForEach-Object {
+                    If (-not(Test-Path "C:\Windows\Fonts\$($_.Name)")) {        
+                        $destination.CopyHere($_.FullName, 0x10)
+                    }
+                }
+
+                Remove-Item -Path ".\CascadiaCode" -Recurse -Force
+                Remove-Item -Path ".\CascadiaCode.zip" -Force
             }
-            Enable-TransientPrompt
+        } catch {
+            Write-Error "Failed to download or install the Cascadia Code font. Error: $_"
         }
     }
 }
@@ -311,21 +288,36 @@ function flushdns { Clear-DnsClientCache }
 
 function k9 { Stop-Process -Name $args[0] }
 
-function ep { & $editor $PROFILE }
+function ep { vim $PROFILE }
 
-# Enable transient prompt and other PSReadLine options
-try {
-    Set-PSReadLineOption -ContinuationPrompt '>> ' -HistorySearchCursorMovesToEnd $true -HistorySaveStyle SaveIncrementally -HistoryNoDuplicates $true -HistorySearchCaseSensitive $false -HistorySavePath (Join-Path -Path $HOME -ChildPath '.config\powershell\PSReadline\PSReadlineHistory.txt') -Colors @{
-        Command = 'Yellow'
-        Parameter = 'Green'
-        String = 'DarkCyan'
-    }
-} catch {
-    Write-Warning "PSReadLine option not supported. Ensure you have the latest version installed."
+# Enable transient prompt
+$PSReadlineOption = @{
+    ContinuationPrompt = '>> '
+    HistorySearchCursorMovesToEnd = $true
+    HistorySaveStyle = 'SaveIncrementally'
+    HistoryNoDuplicates = $true
+    HistorySearchCaseSensitive = $false
+    HistorySavePath = (Join-Path -Path $HOME -ChildPath '.config\powershell\PSReadline\PSReadlineHistory.txt')
+    PromptText = '>'
+    TransientPromptEnabled = $true
 }
+Set-PSReadLineOption @PSReadlineOption
+
+# Lazy load and initialize tools
+LazyLoad-OhMyPosh
+LazyLoad-TerminalIcons
+LazyLoad-Zoxide
+LazyLoad-Font
 
 # Set window title after initializing tools
 $Host.UI.RawUI.WindowTitle = "PowerShell"
+
+# Set PSReadLine colors for better readability
+Set-PSReadLineOption -Colors @{
+    Command = 'Yellow'
+    Parameter = 'Green'
+    String = 'DarkCyan'
+}
 
 # Import Terminal-Icons module (if not already imported)
 if (-not (Get-Module -Name Terminal-Icons)) {
@@ -339,56 +331,3 @@ Sync-Profile
 $function:prompt = {
     "$((Get-Location) -replace $HOME, '~')`n> "
 }
-
-# Alias Definitions
-Set-Alias -Name docs -Value { Set-Location -Path $HOME\Documents }
-Set-Alias -Name dtop -Value { Set-Location -Path $HOME\Desktop }
-Set-Alias -Name dev -Value { Set-Location -Path D:\ }
-
-# Manual Sync Command with Progress Output
-function sync-profile {
-    $animationFrames = @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
-    $frameCount = $animationFrames.Count
-    $i = 0
-
-    try {
-        $remoteContent = Invoke-RestMethod -Uri $profileUrl -ErrorAction Stop
-        Write-Host -NoNewline -ForegroundColor Cyan "`r${($animationFrames[$i % $frameCount])} Syncing profile..."
-        if (Test-Path -Path $PROFILE -PathType Leaf) {
-            $localContent = Get-Content -Path $PROFILE -Raw
-            if ($remoteContent -ne $localContent) {
-                $remoteContent | Set-Content -Path $PROFILE -Force
-                Write-Host "`rProfile has been synced with the latest version from GitHub."
-                Write-Host "Please restart your PowerShell session to apply the changes."
-            } else {
-                Write-Host "`rProfile is already up to date."
-            }
-        } else {
-            $remoteContent | Set-Content -Path $PROFILE -Force
-            Write-Host "`rProfile has been created with the latest version from GitHub."
-            Write-Host "Please restart your PowerShell session to apply the changes."
-        }
-    } catch {
-        Write-Warning "`rFailed to sync profile from GitHub. Error: $_"
-    }
-}
-
-# Initialize deferred loading and animation
-function Initialize-DeferredLoading {
-    $jobs = @()
-    $jobs += Start-Job -ScriptBlock { LazyLoad-TerminalIcons }
-    $jobs += Start-Job -ScriptBlock { LazyLoad-Zoxide }
-    $jobs += Start-Job -ScriptBlock { LazyLoad-Font }
-    $jobs += Start-Job -ScriptBlock { LazyLoad-Starship }
-
-    $loadingJob = Start-Job -ScriptBlock { Show-LoadingAnimation }
-    Wait-Job -Job $jobs
-    Stop-Job -Job $loadingJob
-    Remove-Job -Job $loadingJob
-    Clear-Host
-
-    Initialize-Prompt
-}
-
-# Start deferred loading
-Initialize-DeferredLoading
