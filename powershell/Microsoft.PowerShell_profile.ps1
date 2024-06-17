@@ -1,5 +1,3 @@
-# Microsoft.PowerShell_profile.ps1
-
 <#
     Cheat Sheet:
     - Navigation:
